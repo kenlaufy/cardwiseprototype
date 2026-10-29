@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { CATEGORIES, type Category } from "@/lib/rewards";
 
-export function Field({ label, children, error, htmlFor }: { label: string; children: ReactNode; error?: string; htmlFor?: string }) {
+export function Field({ label, children, error, htmlFor }: { label: string; children: ReactNode; error?: string | undefined; htmlFor?: string | undefined }) {
   return (
     <div className="space-y-1.5">
       <label htmlFor={htmlFor} className="text-sm font-medium">{label}</label>

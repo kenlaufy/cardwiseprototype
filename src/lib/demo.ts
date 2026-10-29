@@ -1,7 +1,9 @@
 import { periodBounds, type WalletState } from "./rewards";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
-export const today = () => iso(new Date());
+const pad = (n: number) => String(n).padStart(2, "0");
+/** The user's local date. Not toISOString(), which gives the UTC date: a day ahead on US evenings. */
+export const today = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const addDays = (date: string, n: number) => {
   const d = new Date(date + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + n);
@@ -14,8 +16,7 @@ export function buildDemo(now = today()): WalletState {
   const m = periodBounds(now, "month");
   const nextQStart = addDays(q.end, 1);
   const nextQ = periodBounds(nextQStart, "quarter");
-  const checked = new Date().toISOString();
-  const base = { source: "demo" as const, verified: false, lastChecked: checked };
+  const base = { source: "demo" as const, verified: false, lastChecked: now };
 
   return {
     cards: [

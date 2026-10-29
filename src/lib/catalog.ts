@@ -1,4 +1,5 @@
 import type { BonusRule, CapGroup, Card, Category, Channel, Period } from "./rewards";
+import { today } from "./demo";
 
 // Published U.S. card terms, checked against issuer pages and card reviews. Issuers change
 // terms (and rotating categories every quarter), so users must confirm against their own card.
@@ -378,7 +379,7 @@ export interface CatalogDraft {
 export function catalogDraft(t: CatalogCard, makeId: () => string): CatalogDraft {
   const id = makeId();
   const source = t.generic ? "manual" : "catalog";
-  const lastChecked = t.generic ? new Date().toISOString() : CATALOG_CHECKED;
+  const lastChecked = t.generic ? today() : CATALOG_CHECKED;
   const capIds = new Map((t.caps ?? []).map((c) => [c.id, makeId()]));
   const caps: CapGroup[] = (t.caps ?? []).map((c) => ({
     id: capIds.get(c.id)!,

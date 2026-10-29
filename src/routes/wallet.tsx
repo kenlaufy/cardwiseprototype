@@ -31,7 +31,7 @@ export const Route = createFileRoute("/wallet")({
 interface Draft { card: Card; rules: BonusRule[]; caps: CapGroup[]; notes?: string[] }
 
 const newRule = (cardId: string): BonusRule => ({
-  id: uid(), cardId, categories: ["groceries"], rate: 3, requiresActivation: false, activated: false, source: "manual", verified: false, lastChecked: new Date().toISOString(),
+  id: uid(), cardId, categories: ["groceries"], rate: 3, requiresActivation: false, activated: false, source: "manual", verified: false, lastChecked: today(),
 });
 
 function Wallet() {
@@ -133,7 +133,7 @@ function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => v
   const [d, setD] = useState<Draft>(draft);
   const [err, setErr] = useState<string | null>(null);
   const setCard = (p: Partial<Card>) => setD({ ...d, card: { ...d.card, ...p } });
-  const setRule = (id: string, p: Partial<BonusRule>) => setD({ ...d, rules: d.rules.map((r) => (r.id === id ? { ...r, ...p, lastChecked: new Date().toISOString() } : r)) });
+  const setRule = (id: string, p: Partial<BonusRule>) => setD({ ...d, rules: d.rules.map((r) => (r.id === id ? { ...r, ...p, lastChecked: today() } : r)) });
   const setCap = (id: string, p: Partial<CapGroup>) => setD({ ...d, caps: d.caps.map((g) => (g.id === id ? { ...g, ...p } : g)) });
 
   const submit = () => {

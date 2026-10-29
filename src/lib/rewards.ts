@@ -102,7 +102,7 @@ export interface CardResult {
   appliedRule?: BonusRule | undefined;
   capRemaining?: number | undefined;
   appliedOffer?: Offer | undefined;
-  potential?: { reward: number | undefined; reason: string }; // value if inactive bonus/offer were activated
+  potential?: { reward: number; reason: string } | undefined; // value if inactive bonus/offer were activated
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -158,7 +158,7 @@ export function capUsed(
   date: string,
   excludePurchaseId?: string,
 ): number {
-  const { start, end } = periodBounds(date, group.period) | undefined;
+  const { start, end } = periodBounds(date, group.period);
   const groupRules = state.rules.filter((r) => r.capGroupId === group.id);
   let used = 0;
   const purchases = state.purchases

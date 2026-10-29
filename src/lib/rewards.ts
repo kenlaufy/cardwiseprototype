@@ -8,11 +8,13 @@ export const CATEGORIES = [
   "transit",
   "online shopping",
   "entertainment",
+  "streaming",
+  "drugstores",
   "other",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 export type Channel = "online" | "in-store";
-export type DataSource = "demo" | "manual" | "verified";
+export type DataSource = "demo" | "manual" | "catalog" | "verified";
 export type Period = "month" | "quarter" | "year";
 
 export interface Card {
@@ -325,7 +327,11 @@ export const MERCHANT_HINTS: Record<string, Category> = {
   uber: "transit",
   lyft: "transit",
   delta: "travel",
-  netflix: "entertainment",
+  netflix: "streaming",
+  spotify: "streaming",
+  hulu: "streaming",
+  cvs: "drugstores",
+  walgreens: "drugstores",
   costco: "other",
   target: "other",
   walmart: "other",

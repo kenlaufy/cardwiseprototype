@@ -35,7 +35,7 @@ export function buildDemo(now = today()): WalletState {
     offers: [
       { id: "o-dine", cardId: "flat", title: "10% back on dining", categories: ["dining"], rate: 10, maxReward: 15, startDate: addDays(now, -10), endDate: addDays(now, 5), requiresActivation: true, activated: false, stackable: false, activationUrl: "https://example.com/activate", source: "demo" },
       { id: "o-travel", cardId: "grocer", title: "8% back on travel", categories: ["travel"], rate: 8, startDate: addDays(now, -60), endDate: addDays(now, -3), requiresActivation: false, activated: true, stackable: false, source: "demo" },
-      { id: "o-stream", cardId: "rotate", title: "$5 back on streaming", categories: ["entertainment"], rate: 20, maxReward: 5, startDate: addDays(now, 3), endDate: addDays(now, 40), requiresActivation: false, activated: false, stackable: true, source: "demo" },
+      { id: "o-stream", cardId: "rotate", title: "$5 back on streaming", categories: ["streaming"], rate: 20, maxReward: 5, startDate: addDays(now, 3), endDate: addDays(now, 40), requiresActivation: false, activated: false, stackable: true, source: "demo" },
     ],
     purchases: [
       { id: "p1", cardId: "grocer", amount: 300, category: "groceries", merchant: "Safeway", date: m.start, channel: "in-store" },

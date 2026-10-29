@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useStore, uid } from "@/lib/store";
 import { capUsed, nextReset, money, type BonusRule, type CapGroup, type Card, type Channel, type Period } from "@/lib/rewards";
 import { today } from "@/lib/demo";
+import { CATALOG, CATALOG_CHECKED, catalogDraft } from "@/lib/catalog";
 import { CardTile, CARD_COLORS, tileClass } from "@/components/CardTile";
 import { CategoryChips, Empty, Field, PageTitle, selectCls } from "@/components/Field";
 import { Button } from "@/components/ui/button";
@@ -27,38 +28,11 @@ export const Route = createFileRoute("/wallet")({
   component: Wallet,
 });
 
-interface Draft { card: Card; rules: BonusRule[]; caps: CapGroup[] }
-
-// Generic, fictional templates — users must confirm terms against their issuer.
-const CATALOG: { name: string; issuer: string; color: string; base: number; rules: { cats: BonusRule["categories"]; rate: number; cap?: [number, Period] }[] }[] = [
-  { name: "Flat 2% Cash Back", issuer: "Any issuer", color: "slate", base: 2, rules: [] },
-  { name: "Flat 1.5% Cash Back", issuer: "Any issuer", color: "ink", base: 1.5, rules: [] },
-  { name: "Grocery 6% (capped yearly)", issuer: "Any issuer", color: "emerald", base: 1, rules: [{ cats: ["groceries"], rate: 6, cap: [6000, "year"] }] },
-  { name: "Dining & Entertainment 3%", issuer: "Any issuer", color: "rose", base: 1, rules: [{ cats: ["dining", "entertainment"], rate: 3 }] },
-  { name: "Gas & Transit 4%", issuer: "Any issuer", color: "amber", base: 1, rules: [{ cats: ["gas", "transit"], rate: 4 }] },
-  { name: "Online Shopping 5% (quarterly)", issuer: "Any issuer", color: "teal", base: 1, rules: [{ cats: ["online shopping"], rate: 5, cap: [1500, "quarter"] }] },
-];
+interface Draft { card: Card; rules: BonusRule[]; caps: CapGroup[]; notes?: string[] }
 
 const newRule = (cardId: string): BonusRule => ({
   id: uid(), cardId, categories: ["groceries"], rate: 3, requiresActivation: false, activated: false, source: "manual", verified: false, lastChecked: new Date().toISOString(),
 });
-
-function fromCatalog(t: (typeof CATALOG)[number]): Draft {
-  const id = uid();
-  const caps: CapGroup[] = [];
-  const rules = t.rules.map((r) => {
-    const rule = newRule(id);
-    rule.categories = r.cats;
-    rule.rate = r.rate;
-    if (r.cap) {
-      const g: CapGroup = { id: uid(), cardId: id, label: `${r.cats.join(" & ")} bonus`, amount: r.cap[0], period: r.cap[1] };
-      caps.push(g);
-      rule.capGroupId = g.id;
-    }
-    return rule;
-  });
-  return { card: { id, name: t.name, issuer: t.issuer, color: t.color, baseRate: t.base, source: "manual" }, rules, caps };
-}
 
 function Wallet() {
   const { state, saveCard, removeCard } = useStore();
@@ -66,8 +40,9 @@ function Wallet() {
   const [picking, setPicking] = useState(false);
   const [q, setQ] = useState("");
   const now = today();
+  const matches = CATALOG.filter((t) => `${t.issuer} ${t.name}`.toLowerCase().includes(q.trim().toLowerCase()));
 
-  const blank = (): Draft => ({ card: { id: uid(), name: "", issuer: "", color: "teal", baseRate: 1, source: "manual" }, rules: [], caps: [] });
+  const blank =(): Draft => ({ card: { id: uid(), name: "", issuer: "", color: "teal", baseRate: 1, source: "manual" }, rules: [], caps: [] });
 
   return (
     <div>
@@ -94,6 +69,7 @@ function Wallet() {
                 {rules.map((r) => (
                   <li key={r.id} className="flex flex-wrap items-center gap-x-2">
                     <b>{r.rate}%</b> <span className="capitalize">{r.categories.join(", ")}</span>
+                    {r.merchants?.length ? <span className="text-xs text-muted-foreground">at {r.merchants.join(", ")}</span> : null}
                     {r.startDate && <span className="text-xs text-muted-foreground">{r.startDate} → {r.endDate}</span>}
                     {r.requiresActivation && <span className={`rounded-full px-2 text-xs ${r.activated ? "bg-success-soft" : "bg-warning-soft"}`}>{r.activated ? "Activated" : "Needs activation"}</span>}
                   </li>
@@ -118,14 +94,27 @@ function Wallet() {
       <Dialog open={picking} onOpenChange={setPicking}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add a card</DialogTitle></DialogHeader>
-          <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search card types" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-          <div className="space-y-2">
-            {CATALOG.filter((t) => t.name.toLowerCase().includes(q.toLowerCase())).map((t) => (
-              <button key={t.name} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:border-accent" onClick={() => { setPicking(false); setDraft(fromCatalog(t)); }}>
-                <span className={`h-8 w-12 rounded-md ${tileClass(t.color)}`} /> <span className="flex-1 text-sm font-medium">{t.name}</span>
-              </button>
-            ))}
-            <p className="text-xs text-muted-foreground">Templates are generic starting points — adjust rates to match your card's terms.</p>
+          <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search cards or issuers" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <div className="space-y-4">
+            {(["Popular cards", "Generic templates"] as const).map((group) => {
+              const list = matches.filter((t) => !!t.generic === (group === "Generic templates"));
+              return list.length > 0 && (
+                <div key={group} className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</h3>
+                  {list.map((t) => (
+                    <button key={t.id} className="flex w-full items-start gap-3 rounded-xl border border-border p-3 text-left hover:border-accent" onClick={() => { setPicking(false); setDraft(catalogDraft(t, uid)); }}>
+                      <span className={`mt-0.5 h-8 w-12 shrink-0 rounded-md ${tileClass(t.color)}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium">{t.name}{!t.generic && <span className="font-normal text-muted-foreground"> · {t.issuer}</span>}</span>
+                        <span className="block text-xs text-muted-foreground">{t.summary}{t.annualFee > 0 && ` · $${t.annualFee}/yr fee`}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+            {matches.length === 0 && <p className="text-sm text-muted-foreground">No cards match "{q.trim()}". Try an issuer name, or create a custom card.</p>}
+            <p className="text-xs text-muted-foreground">Popular cards use published terms checked {CATALOG_CHECKED}. Issuers change terms, so confirm against your card. Generic templates are starting points to adjust.</p>
           </div>
           <Button variant="outline" onClick={() => { setPicking(false); setDraft(blank()); }}>Create a custom card</Button>
         </DialogContent>
@@ -137,7 +126,7 @@ function Wallet() {
 }
 
 function SourceTag({ s }: { s: Card["source"] }) {
-  return <span>{s === "demo" ? "Demo data" : s === "verified" ? "Verified" : "Manually entered"}</span>;
+  return <span>{s === "demo" ? "Demo data" : s === "catalog" ? "From catalog" : s === "verified" ? "Verified" : "Manually entered"}</span>;
 }
 
 function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => void; onSave: (d: Draft) => void }) {
@@ -164,6 +153,12 @@ function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => v
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader><DialogTitle>{draft.card.name ? "Edit card" : "Custom card"}</DialogTitle></DialogHeader>
         <div className="space-y-4">
+          {d.card.source === "catalog" && (
+            <div className="space-y-1 rounded-xl bg-muted p-3 text-xs">
+              {d.notes?.map((n) => <p key={n}>{n}</p>)}
+              <p className="text-muted-foreground">Published terms checked {CATALOG_CHECKED}. Confirm against your card before relying on them.</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Card name"><Input value={d.card.name} maxLength={50} onChange={(e) => setCard({ name: e.target.value })} /></Field>
             <Field label="Issuer"><Input value={d.card.issuer} maxLength={50} onChange={(e) => setCard({ issuer: e.target.value })} /></Field>
@@ -183,7 +178,7 @@ function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => v
                 <Input aria-label="Cap label" value={g.label} onChange={(e) => setCap(g.id, { label: e.target.value })} />
                 <Input aria-label="Cap amount" type="number" value={g.amount} onChange={(e) => setCap(g.id, { amount: Number(e.target.value) })} />
                 <select aria-label="Reset period" className={selectCls} value={g.period} onChange={(e) => setCap(g.id, { period: e.target.value as Period })}><option value="month">monthly</option><option value="quarter">quarterly</option><option value="year">yearly</option></select>
-                <Button size="icon" variant="ghost" aria-label="Remove cap" onClick={() => setD({ caps: d.caps.filter((x) => x.id !== g.id), card: d.card, rules: d.rules.map((r) => (r.capGroupId === g.id ? { ...r, capGroupId: undefined } : r)) })}><Trash2 className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" aria-label="Remove cap" onClick={() => setD({ ...d, caps: d.caps.filter((x) => x.id !== g.id), rules: d.rules.map((r) => (r.capGroupId === g.id ? { ...r, capGroupId: undefined } : r)) })}><Trash2 className="h-4 w-4" /></Button>
               </div>
             ))}
             <p className="text-xs text-muted-foreground">Point several rules at one cap to make it shared.</p>
@@ -207,7 +202,7 @@ function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => v
                   {r.requiresActivation && <label className="flex items-center gap-2"><Switch checked={r.activated} onCheckedChange={(v) => setRule(r.id, { activated: v })} /> I've activated it</label>}
                   <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => setD({ ...d, rules: d.rules.filter((x) => x.id !== r.id) })}>Remove</Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Source: {r.source === "demo" ? "demo data" : r.verified ? "verified" : "manually entered, unverified"} · last checked {r.lastChecked.slice(0, 10)}</p>
+                <p className="text-xs text-muted-foreground">Source: {r.source === "demo" ? "demo data" : r.source === "catalog" ? "published terms, unverified" : r.verified ? "verified" : "manually entered, unverified"} · last checked {r.lastChecked.slice(0, 10)}</p>
               </div>
             ))}
           </div>

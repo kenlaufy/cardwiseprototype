@@ -19,7 +19,7 @@ export interface Card {
   id: string;
   name: string;
   issuer: string;
-  nickname?: string;
+  nickname?: string | undefined;
   color: string; // one of CARD_COLORS keys
   baseRate: number; // percent, e.g. 1 = 1%
   source: DataSource;
@@ -38,11 +38,11 @@ export interface BonusRule {
   cardId: string;
   categories: Category[];
   rate: number; // percent
-  channel?: Channel; // undefined = any
-  merchants?: string[]; // if set, purchase merchant must match
-  capGroupId?: string;
-  startDate?: string; // YYYY-MM-DD inclusive
-  endDate?: string; // inclusive
+  channel?: Channel | undefined; // undefined = any
+  merchants?: string[] | undefined; // if set, purchase merchant must match
+  capGroupId?: string | undefined;
+  startDate?: string | undefined; // YYYY-MM-DD inclusive
+  endDate?: string | undefined; // inclusive
   requiresActivation: boolean;
   activated: boolean; // only true after user confirmation
   source: DataSource;
@@ -55,15 +55,15 @@ export interface Offer {
   cardId: string;
   title: string;
   categories: Category[];
-  merchants?: string[];
+  merchants?: string[] | undefined;
   rate: number; // extra percent
-  maxReward?: number; // dollars
+  maxReward?: number | undefined; // dollars
   startDate: string;
   endDate: string;
   requiresActivation: boolean;
   activated: boolean;
   stackable: boolean;
-  activationUrl?: string;
+  activationUrl?: string | undefined;
   source: DataSource;
 }
 
@@ -72,7 +72,7 @@ export interface Purchase {
   cardId: string;
   amount: number;
   category: Category;
-  merchant?: string;
+  merchant?: string | undefined;
   date: string;
   channel: Channel;
 }
@@ -88,7 +88,7 @@ export interface WalletState {
 export interface PurchaseInput {
   amount: number;
   category: Category;
-  merchant?: string;
+  merchant?: string | undefined;
   date: string;
   channel: Channel;
 }
@@ -99,10 +99,10 @@ export interface CardResult {
   effectiveRate: number;
   explanation: string;
   steps: string[];
-  appliedRule?: BonusRule;
-  capRemaining?: number;
-  appliedOffer?: Offer;
-  potential?: { reward: number; reason: string }; // value if inactive bonus/offer were activated
+  appliedRule?: BonusRule | undefined;
+  capRemaining?: number | undefined;
+  appliedOffer?: Offer | undefined;
+  potential?: { reward: number | undefined; reason: string }; // value if inactive bonus/offer were activated
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -118,7 +118,7 @@ export function inDateRange(date: string, start?: string, end?: string) {
 }
 
 export function periodBounds(date: string, period: Period): { start: string; end: string } {
-  const [y, m] = date.split("-").map(Number);
+  const [y = 1970, m = 1] = date.split("-").map(Number);
   let sm = m,
     em = m;
   if (period === "quarter") {
@@ -158,7 +158,7 @@ export function capUsed(
   date: string,
   excludePurchaseId?: string,
 ): number {
-  const { start, end } = periodBounds(date, group.period);
+  const { start, end } = periodBounds(date, group.period) | undefined;
   const groupRules = state.rules.filter((r) => r.capGroupId === group.id);
   let used = 0;
   const purchases = state.purchases

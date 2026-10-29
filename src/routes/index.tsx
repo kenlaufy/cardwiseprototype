@@ -46,11 +46,11 @@ function BestCard() {
       <Empty title="Add your first card" body="Add the cards you already carry and we'll tell you which to use." action={<Button asChild><Link to="/wallet">Go to My Wallet</Link></Button>} />
     );
 
-  const best = ranked[0];
+  const best = ranked[0]!;
   const tied = ranked.filter((r) => r.reward === best.reward);
 
   const record = (cardId: string) => {
-    if (amountError) return toast.error(amountError);
+    if (amountError) { toast.error(amountError); return; }
     savePurchase({ id: uid(), cardId, amount, category, merchant: merchant || undefined, date, channel });
     toast.success("Purchase recorded — caps updated");
   };
@@ -66,7 +66,7 @@ function BestCard() {
           </div>
         </Field>
         <Field label="Category">
-          <CategoryChips value={[category]} onChange={(v) => { setCategory(v[0]); setConfirmed(false); }} />
+          <CategoryChips value={[category]} onChange={(v) => { setCategory(v[0] ?? "other"); setConfirmed(false); }} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Merchant (optional)" htmlFor="m">

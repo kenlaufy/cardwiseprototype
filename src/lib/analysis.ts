@@ -197,3 +197,87 @@ export function catalogUpside(state: WalletState, purchases: Purchase[], days: n
     .filter((u) => u.extra > 0 && u.net > 0)
     .sort((a, b) => b.net - a.net);
 }
+
+export type FeeVerdict = "keep" | "borderline" | "costly" | "early";
+
+export interface FeeCheck {
+  card: Card;
+  fee: number;
+  since: string; // Jan 1, or the first purchase recorded this year if that's later
+  days: number;
+  spent: number; // on this card, this year
+  earned: number;
+  baseline: number; // what the same purchases would have earned without this card
+  baselineLabel: string;
+  perYear: { earned: number; baseline: number; extra: number }; // at this year's pace
+  perks: number;
+  net: number; // extra per year + perks − fee
+  verdict: FeeVerdict;
+}
+
+/** Under a month of purchases is too little to judge; within ±10% of the fee (at least $15) is a toss-up. */
+export function feeVerdict(net: number, fee: number, days: number): FeeVerdict {
+  const margin = Math.max(15, fee * 0.1);
+  if (days < 30) return "early";
+  return net >= margin ? "keep" : net <= -margin ? "costly" : "borderline";
+}
+
+/**
+ * For each card with an annual fee: the cash back it earned this year against what the same purchases
+ * would have earned on your other cards (or a no-fee 2% card, if it's your only card), scaled to a year.
+ */
+export function feeChecks(state: WalletState, now: string): FeeCheck[] {
+  const yearStart = `${now.slice(0, 4)}-01-01`;
+  const thisYear = state.purchases.filter((p) => p.date >= yearStart && p.date <= now);
+  const firstRecorded = thisYear.reduce((min, p) => (p.date < min ? p.date : min), now);
+  const since = firstRecorded > yearStart ? firstRecorded : yearStart;
+  const days = daysBetween(since, now) + 1;
+  const scale = 365 / Math.max(days, 30);
+  const earnedMap = earnedByPurchase(state);
+
+  return state.cards
+    .filter((card) => (card.annualFee ?? 0) > 0)
+    .map((card) => {
+      const fee = card.annualFee ?? 0;
+      const mine = thisYear.filter((p) => p.cardId === card.id);
+      const earned = sum(mine.map((p) => earnedMap.get(p.id) ?? 0));
+      const others = state.cards.filter((c) => c.id !== card.id);
+      let baseline: number;
+      if (others.length) {
+        // Replay this card's purchases on your other cards, on top of what they already carry.
+        const placed = state.purchases.filter((p) => p.cardId !== card.id);
+        const sim: WalletState = { ...state, cards: others, purchases: placed };
+        let total = 0;
+        for (const p of [...mine].sort((a, b) => a.date.localeCompare(b.date))) {
+          const best = rankCards(sim, p)[0];
+          if (!best) continue;
+          total += best.reward;
+          placed.push({ ...p, cardId: best.card.id });
+        }
+        baseline = round2(total);
+      } else {
+        baseline = sum(mine.map((p) => round2(p.amount * 0.02)));
+      }
+      const perYear = {
+        earned: round2(earned * scale),
+        baseline: round2(baseline * scale),
+        extra: round2((earned - baseline) * scale),
+      };
+      const perks = card.feeReview?.perksValue ?? 0;
+      const net = round2(perYear.extra + perks - fee);
+      return {
+        card,
+        fee,
+        since,
+        days,
+        spent: sum(mine.map((p) => p.amount)),
+        earned,
+        baseline,
+        baselineLabel: others.length ? "your other cards" : "a no-fee 2% card",
+        perYear,
+        perks,
+        net,
+        verdict: feeVerdict(net, fee, days),
+      };
+    });
+}

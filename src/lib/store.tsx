@@ -31,6 +31,7 @@ interface Ctx {
   exit: () => void;
   resetDemo: () => void;
   saveCard: (c: Card, rules: BonusRule[], caps: CapGroup[]) => void;
+  updateCard: (c: Card) => void;
   removeCard: (id: string) => void;
   savePurchase: (p: Purchase) => void;
   removePurchase: (id: string) => void;
@@ -85,6 +86,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           rules: [...s.rules.filter((r) => r.cardId !== c.id), ...rules],
           capGroups: [...s.capGroups.filter((g) => g.cardId !== c.id), ...caps],
         })),
+      updateCard: (c) => up((s) => ({ ...s, cards: s.cards.map((x) => (x.id === c.id ? c : x)) })),
       removeCard: (id) =>
         up((s) => ({
           ...s,

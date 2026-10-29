@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyze, catalogUpside, earnedByPurchase } from "./analysis";
+import { analyze, catalogUpside, earnedByPurchase, feeChecks, feeVerdict } from "./analysis";
 import { monthLabel, monthStart } from "./dates";
 import { buildDemo } from "./demo";
 
@@ -87,5 +87,60 @@ describe("reward analysis", () => {
     }
     const nets = upside.map((u) => u.net);
     expect(nets).toEqual([...nets].sort((x, y) => y - x));
+  });
+});
+
+describe("annual fee check", () => {
+  const withFee = (fee: number, perksValue = 0) => {
+    const s = demo();
+    s.cards = s.cards.map((c) =>
+      c.id === "grocer"
+        ? {
+            ...c,
+            annualFee: fee,
+            feeReview: { decision: "undecided", perksValue, reviewedOn: NOW },
+          }
+        : c,
+    );
+    return feeChecks(s, NOW);
+  };
+
+  it("compares this year's cash back with what your other cards would have paid", () => {
+    const [check, ...rest] = feeChecks(demo(), NOW);
+    expect(rest).toHaveLength(0); // only the demo grocery card has a fee
+    expect(check).toMatchObject({
+      fee: 95,
+      since: "2026-07-02", // the first purchase recorded this year
+      days: 120,
+      earned: 67.05,
+      baseline: 29.25,
+      baselineLabel: "your other cards",
+      perYear: { earned: 203.94, baseline: 88.97, extra: 114.97 },
+      net: 19.97,
+      verdict: "keep",
+    });
+  });
+
+  it("counts perks the cardholder values, and flags cards that cost more than they earn", () => {
+    expect(withFee(95, 30)[0]).toMatchObject({ perks: 30, net: 49.97, verdict: "keep" });
+    expect(withFee(110)[0]).toMatchObject({ net: 4.97, verdict: "borderline" });
+    expect(withFee(250)[0]).toMatchObject({ net: -135.03, verdict: "costly" });
+  });
+
+  it("compares against a no-fee 2% card when it's your only card", () => {
+    const s = demo();
+    s.cards = s.cards.filter((c) => c.id === "grocer");
+    expect(feeChecks(s, NOW)[0]).toMatchObject({
+      baselineLabel: "a no-fee 2% card",
+      baseline: 29.25,
+    });
+  });
+
+  it("waits for a month of purchases before judging", () => {
+    expect(feeChecks(buildDemo("2026-01-15"), "2026-01-15")[0]?.verdict).toBe("early");
+    expect(feeVerdict(-50, 95, 29)).toBe("early");
+    expect(feeVerdict(15, 95, 30)).toBe("keep");
+    expect(feeVerdict(14.99, 95, 30)).toBe("borderline");
+    expect(feeVerdict(-15, 95, 30)).toBe("costly");
   });
 });

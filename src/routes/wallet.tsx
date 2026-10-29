@@ -7,6 +7,7 @@ import { capUsed, nextReset, money, type BonusRule, type CapGroup, type Card, ty
 import { today } from "@/lib/demo";
 import { CATALOG, CATALOG_CHECKED, catalogDraft } from "@/lib/catalog";
 import { CardTile, CARD_COLORS, tileClass } from "@/components/CardTile";
+import { FeeCheckSection } from "@/components/FeeReview";
 import { CategoryChips, Empty, Field, PageTitle, selectCls } from "@/components/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,11 +43,12 @@ function Wallet() {
   const now = today();
   const matches = CATALOG.filter((t) => `${t.issuer} ${t.name}`.toLowerCase().includes(q.trim().toLowerCase()));
 
-  const blank =(): Draft => ({ card: { id: uid(), name: "", issuer: "", color: "teal", baseRate: 1, source: "manual" }, rules: [], caps: [] });
+  const blank = (): Draft => ({ card: { id: uid(), name: "", issuer: "", color: "teal", baseRate: 1, source: "manual" }, rules: [], caps: [] });
 
   return (
     <div>
       <PageTitle title="My Wallet" sub="Cards you already own. No card numbers needed." action={<Button onClick={() => setPicking(true)}><Plus className="h-4 w-4" /> Add card</Button>} />
+      <FeeCheckSection />
       {state.cards.length === 0 && <Empty title="Your wallet is empty" body="Add a card from the catalog or create a custom one." action={<Button onClick={() => setPicking(true)}>Add a card</Button>} />}
       <div className="grid gap-5 sm:grid-cols-2">
         {state.cards.map((c) => {
@@ -75,6 +77,7 @@ function Wallet() {
                   </li>
                 ))}
                 <li className="text-muted-foreground">{c.baseRate}% on everything else</li>
+                {(c.annualFee ?? 0) > 0 && <li className="text-muted-foreground">{money(c.annualFee ?? 0)} annual fee</li>}
               </ul>
               {caps.map((g) => {
                 const used = capUsed(state, g, now);
@@ -139,6 +142,7 @@ function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => v
   const submit = () => {
     if (!d.card.name.trim()) return setErr("Card name is required");
     if (!(d.card.baseRate >= 0 && d.card.baseRate <= 20)) return setErr("Base rate must be between 0% and 20%");
+    if (!((d.card.annualFee ?? 0) >= 0 && (d.card.annualFee ?? 0) <= 1000)) return setErr("Annual fee must be between $0 and $1,000");
     for (const r of d.rules) {
       if (!r.categories.length) return setErr("Each bonus rule needs at least one category");
       if (!(r.rate > 0 && r.rate <= 30)) return setErr("Bonus rates must be between 0% and 30%");
@@ -164,6 +168,7 @@ function CardEditor({ draft, onClose, onSave }: { draft: Draft; onClose: () => v
             <Field label="Issuer"><Input value={d.card.issuer} maxLength={50} onChange={(e) => setCard({ issuer: e.target.value })} /></Field>
             <Field label="Nickname"><Input value={d.card.nickname ?? ""} maxLength={30} onChange={(e) => setCard({ nickname: e.target.value })} /></Field>
             <Field label="Base cash back %"><Input type="number" step="0.1" value={d.card.baseRate} onChange={(e) => setCard({ baseRate: Number(e.target.value) })} /></Field>
+            <Field label="Annual fee ($)"><Input type="number" min={0} step="any" placeholder="0" value={d.card.annualFee ?? ""} onChange={(e) => setCard({ annualFee: e.target.value ? Number(e.target.value) : undefined })} /></Field>
           </div>
           <Field label="Color">
             <div className="flex gap-2">

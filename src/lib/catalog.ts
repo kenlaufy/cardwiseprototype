@@ -405,7 +405,7 @@ export function catalogDraft(t: CatalogCard, makeId: () => string): CatalogDraft
     lastChecked,
   }));
   return {
-    card: { id, name: t.name, issuer: t.issuer, color: t.color, baseRate: t.baseRate, source },
+    card: { id, name: t.name, issuer: t.issuer, color: t.color, baseRate: t.baseRate, annualFee: t.annualFee || undefined, source },
     rules,
     caps,
     notes: t.notes ?? [],

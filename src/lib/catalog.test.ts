@@ -100,3 +100,15 @@ describe("card catalog", () => {
     expect(w.earn({ amount: 1000, category: "gas" }).reward).toBe(20);
   });
 });
+
+describe("catalog fees", () => {
+  it("carries the annual fee onto the card", () => {
+    const fee = (id: string) =>
+      catalogDraft(
+        CATALOG.find((t) => t.id === id)!,
+        makeId,
+      ).card.annualFee;
+    expect(fee("amex-blue-cash-preferred")).toBe(95);
+    expect(fee("wf-active-cash")).toBeUndefined();
+  });
+});

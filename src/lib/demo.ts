@@ -24,7 +24,7 @@ export function buildDemo(now = today()): WalletState {
   return {
     cards: [
       { id: "flat", name: "Steady 2%", issuer: "Demo Bank", color: "slate", baseRate: 2, source: "demo" },
-      { id: "grocer", name: "Everyday Rewards", issuer: "Demo Credit Union", color: "emerald", baseRate: 1, source: "demo" },
+      { id: "grocer", name: "Everyday Rewards", issuer: "Demo Credit Union", color: "emerald", baseRate: 1, annualFee: 95, source: "demo" },
       { id: "rotate", name: "Quarterly Five", issuer: "Demo Financial", color: "amber", baseRate: 1, source: "demo" },
     ],
     capGroups: [

@@ -25,6 +25,16 @@ export interface Card {
   color: string; // one of CARD_COLORS keys
   baseRate: number; // percent, e.g. 1 = 1%
   source: DataSource;
+  annualFee?: number | undefined; // dollars per year
+  feeReview?: FeeReview | undefined;
+}
+
+/** The cardholder's own call on whether a card is worth its annual fee. */
+export interface FeeReview {
+  decision: "keep" | "downgrade" | "cancel" | "undecided";
+  perksValue: number; // dollars a year of perks they'd otherwise pay for
+  note?: string | undefined;
+  reviewedOn: string;
 }
 
 export interface CapGroup {

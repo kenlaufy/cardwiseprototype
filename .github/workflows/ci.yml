@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun run typecheck
+
+      # Lovable doesn't follow Prettier, so formatting is left to `bun run format`
+      # rather than failing every Lovable edit.
+      - name: Lint
+        run: 'bun x eslint . --rule "prettier/prettier: off"'
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Build
+        run: bun run build

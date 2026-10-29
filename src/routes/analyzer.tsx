@@ -9,6 +9,7 @@ import { today } from "@/lib/demo";
 import { money } from "@/lib/rewards";
 import { tileClass } from "@/components/CardTile";
 import { Empty, PageTitle } from "@/components/Field";
+import { ShuffleDemoBanner } from "@/components/ShuffleDemo";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/analyzer")({
@@ -71,6 +72,8 @@ function AnalyzerPage() {
         title="Analyzer"
         sub="Where your money goes, and how much cash back it earns. Based on the purchases you've recorded."
       />
+
+      <ShuffleDemoBanner />
 
       <div
         role="group"

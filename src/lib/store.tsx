@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { BonusRule, CapGroup, Card, Offer, Purchase, WalletState } from "./rewards";
-import { buildDemo } from "./demo";
+import { buildDemo, today } from "./demo";
+import { PERSONAS, randomPurchases, type Persona } from "./randomizer";
 
 export type Mode = "demo" | "local";
 export interface Prefs {
@@ -12,6 +13,7 @@ export interface Prefs {
 interface Persisted extends WalletState {
   dismissed: string[];
   prefs: Prefs;
+  demoPersona?: string | undefined; // set when demo spending has been shuffled
 }
 
 const EMPTY: Persisted = {
@@ -30,6 +32,7 @@ interface Ctx {
   start: (m: Mode) => void;
   exit: () => void;
   resetDemo: () => void;
+  shuffleDemo: () => Persona;
   saveCard: (c: Card, rules: BonusRule[], caps: CapGroup[]) => void;
   updateCard: (c: Card) => void;
   removeCard: (id: string) => void;
@@ -79,6 +82,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       start: (m) => { localStorage.setItem(MODE_KEY, m); setMode(m); setState(load(m)); },
       exit: () => { localStorage.removeItem(MODE_KEY); setMode(null); setState(EMPTY); },
       resetDemo: () => setState({ ...EMPTY, ...buildDemo() }),
+      // New random purchase history on the demo's current cards, from a different persona each time.
+      shuffleDemo: () => {
+        const choices = PERSONAS.filter((p) => p.label !== state.demoPersona);
+        const pick = choices[Math.floor(Math.random() * choices.length)]!;
+        const { persona, purchases } = randomPurchases(state, today(), Math.floor(Math.random() * 2 ** 31), pick.id);
+        setState({ ...state, purchases, demoPersona: persona.label, dismissed: [] });
+        return persona;
+      },
       saveCard: (c, rules, caps) =>
         up((s) => ({
           ...s,

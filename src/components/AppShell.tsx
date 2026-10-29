@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, ChartColumn, CreditCard, Sparkles, Tag, LogOut } from "lucide-react";
+import { Activity, ChartColumn, CreditCard, Shuffle, Sparkles, Tag, LogOut } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "@/lib/store";
+import { useShuffleDemo } from "@/hooks/use-shuffle-demo";
 import { Welcome } from "./Welcome";
 import { Skeleton } from "./ui/skeleton";
 
@@ -14,7 +15,8 @@ const NAV = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { ready, mode, exit, resetDemo } = useStore();
+  const { ready, mode, state, exit, resetDemo } = useStore();
+  const shuffle = useShuffleDemo();
   const path = useRouterState({ select: (s) => s.location.pathname });
 
   if (!ready)
@@ -39,6 +41,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="mt-auto space-y-2 text-xs text-muted-foreground">
           <ModeBadge mode={mode} />
+          {mode === "demo" && state.demoPersona && <p>Playing as <b className="text-foreground">{state.demoPersona}</b></p>}
+          {mode === "demo" && <button onClick={shuffle} className="flex items-center gap-1 underline"><Shuffle className="h-3 w-3" /> Shuffle spending</button>}
           {mode === "demo" && <button onClick={resetDemo} className="block underline">Reset demo data</button>}
           <button onClick={exit} className="flex items-center gap-1 underline"><LogOut className="h-3 w-3" /> Switch mode</button>
         </div>

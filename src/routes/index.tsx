@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ChevronDown, AlertTriangle, Lock } from "lucide-react";
+import { ChevronDown, AlertTriangle, Dices, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useStore, uid } from "@/lib/store";
 import { merchantCertainty, money, rankCards, type Category, type Channel } from "@/lib/rewards";
 import { today } from "@/lib/demo";
+import { randomPurchase } from "@/lib/randomizer";
 import { CardTile } from "@/components/CardTile";
 import { CategoryChips, Empty, Field } from "@/components/Field";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,17 @@ function BestCard() {
   const best = ranked[0]!;
   const tied = ranked.filter((r) => r.reward === best.reward);
 
+  const surprise = () => {
+    const p = randomPurchase(Math.random);
+    setAmountStr(p.amount.toFixed(2));
+    setCategory(p.category);
+    setMerchant(p.merchant);
+    setChannel(p.channel);
+    setDate(today());
+    setConfirmed(true);
+    setOpen(null);
+  };
+
   const record = (cardId: string) => {
     if (amountError) { toast.error(amountError); return; }
     savePurchase({ id: uid(), cardId, amount, category, merchant: merchant || undefined, date, channel });
@@ -58,6 +70,10 @@ function BestCard() {
   return (
     <div className="space-y-6">
       <section className="space-y-5 rounded-3xl bg-card p-5 shadow-soft md:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">What are you buying?</p>
+          <Button size="sm" variant="outline" onClick={surprise}><Dices className="h-4 w-4" /> Surprise me</Button>
+        </div>
         <Field label="Purchase amount" htmlFor="amt" error={amountError}>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-3xl text-muted-foreground">$</span>

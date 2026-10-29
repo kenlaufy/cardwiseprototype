@@ -1,3 +1,4 @@
+import { monthStart } from "./dates";
 import { periodBounds, type WalletState } from "./rewards";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -16,7 +17,9 @@ export function buildDemo(now = today()): WalletState {
   const m = periodBounds(now, "month");
   const nextQStart = addDays(q.end, 1);
   const nextQ = periodBounds(nextQStart, "quarter");
-  const base = { source: "demo" as const, verified: false, lastChecked: now };
+  // Earlier months, for spending history. None of these touch this month's or quarter's caps.
+  const [m1, m2, m3] = [1, 2, 3].map((back) => monthStart(now, back)) as [string, string, string];
+  const base ={ source: "demo" as const, verified: false, lastChecked: now };
 
   return {
     cards: [
@@ -44,6 +47,19 @@ export function buildDemo(now = today()): WalletState {
       { id: "p3", cardId: "rotate", amount: 900, category: "online shopping", merchant: "Amazon", date: q.start, channel: "online" },
       { id: "p4", cardId: "rotate", amount: 400, category: "gas", merchant: "Shell", date: now, channel: "in-store" },
       { id: "p5", cardId: "flat", amount: 62.4, category: "dining", merchant: "Chipotle", date: now, channel: "in-store" },
+      { id: "h1", cardId: "flat", amount: 15.49, category: "streaming", merchant: "Netflix", date: addDays(m1, 1), channel: "online" },
+      { id: "h2", cardId: "grocer", amount: 312.4, category: "groceries", merchant: "Safeway", date: addDays(m1, 3), channel: "in-store" },
+      { id: "h3", cardId: "rotate", amount: 36, category: "dining", merchant: "Chipotle", date: addDays(m1, 11), channel: "in-store" },
+      { id: "h4", cardId: "flat", amount: 54.2, category: "gas", merchant: "Shell", date: addDays(m1, 17), channel: "in-store" },
+      { id: "h5", cardId: "flat", amount: 15.49, category: "streaming", merchant: "Netflix", date: addDays(m2, 1), channel: "online" },
+      { id: "h6", cardId: "grocer", amount: 128.99, category: "online shopping", merchant: "Amazon", date: addDays(m2, 6), channel: "online" },
+      { id: "h7", cardId: "grocer", amount: 241.75, category: "groceries", merchant: "Trader Joe's", date: addDays(m2, 9), channel: "in-store" },
+      { id: "h8", cardId: "grocer", amount: 22.5, category: "transit", merchant: "Uber", date: addDays(m2, 14), channel: "online" },
+      { id: "h9", cardId: "flat", amount: 486, category: "travel", merchant: "Delta", date: addDays(m2, 20), channel: "online" },
+      { id: "h10", cardId: "flat", amount: 15.49, category: "streaming", merchant: "Netflix", date: addDays(m3, 1), channel: "online" },
+      { id: "h11", cardId: "grocer", amount: 276.3, category: "groceries", merchant: "Kroger", date: addDays(m3, 4), channel: "in-store" },
+      { id: "h12", cardId: "flat", amount: 88.6, category: "dining", merchant: "Olive Garden", date: addDays(m3, 16), channel: "in-store" },
+      { id: "h13", cardId: "rotate", amount: 64, category: "entertainment", merchant: "AMC", date: addDays(m3, 22), channel: "in-store" },
     ],
   };
 }

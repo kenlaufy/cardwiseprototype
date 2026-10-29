@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, CreditCard, Sparkles, Tag, LogOut } from "lucide-react";
+import { Activity, ChartColumn, CreditCard, Sparkles, Tag, LogOut } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { Welcome } from "./Welcome";
@@ -10,6 +10,7 @@ const NAV = [
   { to: "/wallet", label: "My Wallet", icon: CreditCard },
   { to: "/offers", label: "Offers", icon: Tag },
   { to: "/activity", label: "Activity", icon: Activity },
+  { to: "/analyzer", label: "Analyzer", icon: ChartColumn },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -54,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="mx-auto w-full max-w-3xl px-5 py-6 md:px-10 md:py-10">{children}</main>
       </div>
 
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map((n) => {
           const active = path === n.to;
           return (

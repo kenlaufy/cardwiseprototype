@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useStore, uid } from "@/lib/store";
-import { calculateCard, CATEGORIES, money, type Category, type Channel, type Purchase } from "@/lib/rewards";
+import { CATEGORIES, money, type Category, type Channel, type Purchase } from "@/lib/rewards";
+import { earnedByPurchase } from "@/lib/analysis";
 import { today } from "@/lib/demo";
 import { CardTile } from "@/components/CardTile";
 import { Empty, Field, PageTitle, selectCls } from "@/components/Field";
@@ -30,12 +31,8 @@ function ActivityPage() {
   const [edit, setEdit] = useState<Purchase | null>(null);
   const sorted = [...state.purchases].sort((a, b) => b.date.localeCompare(a.date));
   // Estimated reward per purchase, computed against prior purchases only.
-  const est = (p: Purchase) => {
-    const card = state.cards.find((c) => c.id === p.cardId);
-    if (!card) return 0;
-    const prior = state.purchases.filter((x) => x.id !== p.id && (x.date < p.date || (x.date === p.date && state.purchases.indexOf(x) < state.purchases.indexOf(p))));
-    return calculateCard({ ...state, purchases: prior }, card, p).reward;
-  };
+  const earned = earnedByPurchase(state);
+  const est = (p: Purchase) => earned.get(p.id) ?? 0;
   const total = sorted.reduce((s, p) => s + est(p), 0);
 
   const blank = (): Purchase | null => (state.cards[0] ? { id: uid(), cardId: state.cards[0].id, amount: 0, category: "groceries", date: today(), channel: "in-store" } : null);

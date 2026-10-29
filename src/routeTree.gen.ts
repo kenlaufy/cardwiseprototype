@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
+import { Route as AnalyzerRouteImport } from './routes/analyzer'
 import { Route as OffersRouteImport } from './routes/offers'
 import { Route as WalletRouteImport } from './routes/wallet'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const ActivityRoute = ActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyzerRoute = AnalyzerRouteImport.update({
+  id: '/analyzer',
+  path: '/analyzer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OffersRoute = OffersRouteImport.update({
@@ -38,12 +44,14 @@ const WalletRoute = WalletRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/analyzer': typeof AnalyzerRoute
   '/offers': typeof OffersRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/analyzer': typeof AnalyzerRoute
   '/offers': typeof OffersRoute
   '/wallet': typeof WalletRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/analyzer': typeof AnalyzerRoute
   '/offers': typeof OffersRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/activity' | '/offers' | '/wallet'
+  fullPaths: '/' | '/activity' | '/analyzer' | '/offers' | '/wallet'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/offers' | '/wallet'
-  id: '__root__' | '/' | '/activity' | '/offers' | '/wallet'
+  to: '/' | '/activity' | '/analyzer' | '/offers' | '/wallet'
+  id: '__root__' | '/' | '/activity' | '/analyzer' | '/offers' | '/wallet'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
+  AnalyzerRoute: typeof AnalyzerRoute
   OffersRoute: typeof OffersRoute
   WalletRoute: typeof WalletRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/activity'
       fullPath: '/activity'
       preLoaderRoute: typeof ActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analyzer': {
+      id: '/analyzer'
+      path: '/analyzer'
+      fullPath: '/analyzer'
+      preLoaderRoute: typeof AnalyzerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/offers': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
+  AnalyzerRoute: AnalyzerRoute,
   OffersRoute: OffersRoute,
   WalletRoute: WalletRoute,
 }

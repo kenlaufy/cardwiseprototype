@@ -32,9 +32,15 @@ test("guided setup, single recording, refresh and archive preserve history", asy
       .getByRole("listitem")
       .filter({ hasText: "Card archived — purchase history kept" });
     await expect(toast).toBeVisible();
-    const toastBox = await toast.boundingBox(),
-      navBox = await page.getByRole("navigation", { name: "Main", exact: true }).boundingBox();
-    expect(toastBox!.y + toastBox!.height).toBeLessThanOrEqual(navBox!.y);
+    await expect
+      .poll(async () => {
+        const toastBox = await toast.boundingBox();
+        const navBox = await page
+          .getByRole("navigation", { name: "Main", exact: true })
+          .boundingBox();
+        return toastBox && navBox ? toastBox.y + toastBox.height - navBox.y : Infinity;
+      })
+      .toBeLessThanOrEqual(0);
   }
   await page.getByRole("link", { name: "Activity", exact: true }).click();
   await expect(page.getByText("Fictional QA store", { exact: true })).toBeVisible();

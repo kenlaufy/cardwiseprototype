@@ -13,9 +13,9 @@ import { Textarea } from "./ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
 const VERDICT: Record<FeeVerdict, { label: string; icon: LucideIcon; tone: string }> = {
-  keep: { label: "Worth the fee", icon: Check, tone: "bg-success-soft" },
+  keep: { label: "Positive scenario", icon: Check, tone: "bg-success-soft" },
   borderline: { label: "Borderline", icon: Scale, tone: "bg-warning-soft" },
-  costly: { label: "Costing you", icon: AlertTriangle, tone: "bg-destructive/10" },
+  costly: { label: "Negative scenario", icon: AlertTriangle, tone: "bg-destructive/10" },
   early: { label: "Too early to tell", icon: Clock, tone: "bg-muted" },
 };
 
@@ -38,24 +38,17 @@ export function FeeCheckSection() {
   const open = checks.find((c) => c.card.id === reviewing);
 
   if (!state.cards.length) return null;
-  if (!checks.length)
-    return (
-      <p className="mb-6 flex items-start gap-2 rounded-2xl bg-muted p-3 text-sm text-muted-foreground">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        Paying an annual fee on any of these? Edit the card to add it, and CardWise will check
-        whether it earns its keep.
-      </p>
-    );
+  if (!checks.length) return null;
 
   const { since, days } = checks[0]!;
   return (
     <section aria-labelledby="fee-heading" className="mb-6 rounded-3xl bg-card p-5 shadow-soft">
       <h2 id="fee-heading" className="font-display text-xl">
-        Are your annual fees worth it?
+        Annual fee scenarios · experimental
       </h2>
       <p className="text-xs text-muted-foreground">
-        This year's cash back against each card's fee, from {days} days of purchases since{" "}
-        {shortDate(since, now)}.
+        Independent estimates, not a recommendation to keep or cancel a card. From from {days} days
+        of purchases since {shortDate(since, now)}.
       </p>
       <ul className="mt-3 divide-y divide-border">
         {checks.map((c) => {
@@ -93,7 +86,7 @@ export function FeeCheckSection() {
           now={now}
           onClose={() => setReviewing(null)}
           onSave={(feeReview) => {
-            updateCard({ ...open.card, feeReview });
+            if (!updateCard({ ...open.card, feeReview })) return;
             setReviewing(null);
             toast.success("Review saved");
           }}
@@ -147,6 +140,7 @@ function FeeReviewDialog({
   const id = useId();
   const name = check.card.nickname || check.card.name;
   const perksValue = Math.max(0, Number(perks) || 0);
+  const invalidPerks = !Number.isFinite(perksValue) || perksValue > 1_000_000;
   const value = round2(check.perYear.extra + perksValue);
   const net = round2(value - check.fee);
   const verdict = feeVerdict(net, check.fee, check.days);
@@ -294,6 +288,7 @@ function FeeReviewDialog({
             Cancel
           </Button>
           <Button
+            disabled={invalidPerks}
             onClick={() =>
               onSave({ decision, perksValue, note: note.trim() || undefined, reviewedOn: today() })
             }

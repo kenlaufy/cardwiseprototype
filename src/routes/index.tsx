@@ -1,159 +1,365 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { ChevronDown, AlertTriangle, Dices, Lock } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ChevronDown, Check, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useStore, uid } from "@/lib/store";
-import { merchantCertainty, money, rankCards, type Category, type Channel } from "@/lib/rewards";
+import {
+  CATEGORIES,
+  cardReady,
+  merchantCertainty,
+  money,
+  rankCards,
+  type Category,
+  type Channel,
+} from "@/lib/rewards";
+import { isDate } from "@/lib/persistence";
 import { today } from "@/lib/demo";
-import { randomPurchase } from "@/lib/randomizer";
 import { CardTile } from "@/components/CardTile";
-import { CategoryChips, Empty, Field } from "@/components/Field";
+import { Empty, Field } from "@/components/Field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Best Card — CardWise" },
-      { name: "description", content: "Enter a purchase and see which of your cards earns the most cash back." },
-      { property: "og:title", content: "Best Card — CardWise" },
-      { property: "og:description", content: "Which card should you use for this purchase? Find out in seconds." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      {
+        name: "description",
+        content: "Compare your cash-back cards for a purchase, with clear assumptions.",
+      },
+      { property: "og:title", content: "Which card should I use? — CardWise" },
     ],
   }),
   component: BestCard,
 });
-
 function BestCard() {
-  const { state, savePurchase } = useStore();
-  const [amountStr, setAmountStr] = useState("100");
-  const [category, setCategory] = useState<Category>("groceries");
-  const [merchant, setMerchant] = useState("");
-  const [date, setDate] = useState(today());
-  const [channel, setChannel] = useState<Channel>("in-store");
-  const [confirmed, setConfirmed] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
-
-  const amount = Number(amountStr);
-  const amountError = amountStr === "" ? "Enter an amount" : !Number.isFinite(amount) || amount <= 0 ? "Amount must be greater than $0" : amount > 1_000_000 ? "That's above our limit" : undefined;
-  const input = { amount: amountError ? 0 : amount, category, merchant: merchant || undefined, date, channel };
-  const ranked = useMemo(() => rankCards(state, input), [state, amount, category, merchant, date, channel, amountError]); // eslint-disable-line react-hooks/exhaustive-deps
-  const certainty = merchantCertainty(merchant, category);
-  const uncertain = !certainty.certain && !confirmed;
-
-  if (state.cards.length === 0)
+  const { state, savePurchase, removePurchase } = useStore();
+  const [amountStr, setAmountStr] = useState("100"),
+    [category, setCategory] = useState<Category>("groceries"),
+    [merchant, setMerchant] = useState(""),
+    [date, setDate] = useState(today()),
+    [channel, setChannel] = useState<Channel>("in-store");
+  const [more, setMore] = useState(false),
+    [open, setOpen] = useState<string | null>(null),
+    [recordedId, setRecordedId] = useState<string | null>(null);
+  const recording = useRef(false);
+  const change = (fn: () => void) => {
+    fn();
+    setRecordedId(null);
+    recording.current = false;
+  };
+  const amount = Number(amountStr),
+    amountError = !amountStr
+      ? "Enter an amount"
+      : !Number.isFinite(amount) || amount <= 0
+        ? "Enter an amount greater than $0"
+        : amount > 1_000_000
+          ? "Maximum amount is $1,000,000"
+          : Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001
+            ? "Use at most two decimal places"
+            : undefined;
+  const dateError = !isDate(date) ? "Choose a valid date" : undefined;
+  const input = useMemo(
+    () => ({
+      amount: amountError ? 0 : amount,
+      category,
+      merchant: merchant.trim() || undefined,
+      date,
+      channel,
+    }),
+    [amountError, amount, category, merchant, date, channel],
+  );
+  const ranked = useMemo(
+    () => (dateError ? [] : rankCards(state, input)),
+    [dateError, state, input],
+  );
+  const best = ranked[0],
+    certainty = merchantCertainty(merchant, category),
+    needsSetup = state.cards.filter((c) => !c.archived && !cardReady(c, date));
+  const activeCards = state.cards.filter((c) => !c.archived);
+  if (!activeCards.length)
     return (
-      <Empty title="Add your first card" body="Add the cards you already carry and we'll tell you which to use." action={<Button asChild><Link to="/wallet">Go to My Wallet</Link></Button>} />
+      <Empty
+        title="Choose the cards you already own"
+        body="Add a card, confirm its terms and current cap usage, then compare a purchase."
+        action={
+          <Button asChild>
+            <Link to="/wallet">Set up my wallet</Link>
+          </Button>
+        }
+      />
     );
-
-  const best = ranked[0]!;
-  const tied = ranked.filter((r) => r.reward === best.reward);
-
-  const surprise = () => {
-    const p = randomPurchase(Math.random);
-    setAmountStr(p.amount.toFixed(2));
-    setCategory(p.category);
-    setMerchant(p.merchant);
-    setChannel(p.channel);
-    setDate(today());
-    setConfirmed(true);
-    setOpen(null);
-  };
-
   const record = (cardId: string) => {
-    if (amountError) { toast.error(amountError); return; }
-    savePurchase({ id: uid(), cardId, amount, category, merchant: merchant || undefined, date, channel });
-    toast.success("Purchase recorded — caps updated");
+    if (recording.current || recordedId) return;
+    if (amountError || dateError || date > today()) {
+      toast.error(
+        amountError ??
+          dateError ??
+          "Future purchases are estimates only. Record it once it happens.",
+      );
+      return;
+    }
+    recording.current = true;
+    const id = uid();
+    const saved = savePurchase({
+      id,
+      cardId,
+      amount,
+      category,
+      merchant: merchant.trim() || undefined,
+      date,
+      channel,
+    });
+    setRecordedId(id);
+    const undo = () => {
+      removePurchase(id);
+      setRecordedId(null);
+      recording.current = false;
+    };
+    if (saved)
+      toast.success("Purchase saved — cap balances updated", {
+        action: { label: "Undo", onClick: undo },
+        duration: 8000,
+      });
+    else
+      toast.error(
+        "Purchase kept in this session. It has not been saved to this browser. Export a backup.",
+      );
   };
-
+  const tied = best ? ranked.filter((r) => r.reward === best.reward) : [];
   return (
-    <div className="space-y-6">
-      <section className="space-y-5 rounded-3xl bg-card p-5 shadow-soft md:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">What are you buying?</p>
-          <Button size="sm" variant="outline" onClick={surprise}><Dices className="h-4 w-4" /> Surprise me</Button>
+    <div className="space-y-5">
+      <div>
+        <h1 className="font-display text-3xl">Which card should I use?</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Compare a purchase. Recording it is optional.
+        </p>
+      </div>
+      {needsSetup.length > 0 && (
+        <div className="rounded-xl bg-warning-soft p-3 text-sm">
+          {needsSetup.length} {needsSetup.length === 1 ? "card needs" : "cards need"} setup or a
+          terms review before being included.{" "}
+          <Link to="/wallet" className="font-semibold underline">
+            Review wallet
+          </Link>
         </div>
-        <Field label="Purchase amount" htmlFor="amt" error={amountError}>
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-3xl text-muted-foreground">$</span>
-            <input id="amt" inputMode="decimal" value={amountStr} onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9.]/g, ""))}
-              className="h-16 w-full rounded-2xl border border-input bg-background pl-10 pr-4 font-display text-4xl outline-none focus:ring-2 focus:ring-ring" aria-invalid={!!amountError} />
-          </div>
-        </Field>
-        <Field label="Category">
-          <CategoryChips value={[category]} onChange={(v) => { setCategory(v[0] ?? "other"); setConfirmed(false); }} />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Merchant (optional)" htmlFor="m">
-            <Input id="m" value={merchant} onChange={(e) => { setMerchant(e.target.value); setConfirmed(false); }} placeholder="e.g. Safeway" maxLength={60} />
+      )}
+      <section
+        aria-label="Purchase details"
+        className="space-y-4 rounded-3xl bg-card p-4 shadow-soft sm:p-5"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Amount ($)" error={amountError}>
+            <Input
+              inputMode="decimal"
+              value={amountStr}
+              onChange={(e) => change(() => setAmountStr(e.target.value))}
+              className="h-12 text-2xl"
+            />
           </Field>
-          <Field label="Date" htmlFor="d">
-            <Input id="d" type="date" value={date} onChange={(e) => setDate(e.target.value || today())} />
-          </Field>
-          <Field label="Where">
-            <div className="grid grid-cols-2 rounded-md border border-input p-0.5">
-              {(["in-store", "online"] as Channel[]).map((c) => (
-                <button key={c} type="button" aria-pressed={channel === c} onClick={() => setChannel(c)} className={`rounded px-2 py-1.5 text-sm capitalize ${channel === c ? "bg-primary text-primary-foreground" : ""}`}>{c}</button>
-              ))}
-            </div>
+          <Field label="Merchant (optional)">
+            <Input
+              value={merchant}
+              onChange={(e) => change(() => setMerchant(e.target.value))}
+              placeholder="e.g. Safeway"
+              maxLength={60}
+              className="h-12"
+            />
           </Field>
         </div>
-        {uncertain && (
-          <div className="flex flex-col gap-2 rounded-xl bg-warning-soft p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />{certainty.reason} Estimates assume <b className="capitalize">{category}</b>.</p>
-            <Button size="sm" variant="outline" onClick={() => setConfirmed(true)}>Confirm {category}</Button>
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">Category</legend>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.filter((c, i) => more || i < 3 || c === category).map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-pressed={category === c}
+                onClick={() => change(() => setCategory(c))}
+                className={`rounded-full border px-3 py-2 text-sm capitalize ${category === c ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+              >
+                {c}
+              </button>
+            ))}
+            <button
+              aria-expanded={more}
+              onClick={() => setMore(!more)}
+              className="rounded-full border border-border px-3 py-2 text-sm"
+            >
+              {more ? "Fewer categories" : "More categories"}
+            </button>
           </div>
-        )}
+        </fieldset>
       </section>
-
-      {!amountError && (
-        <section aria-live="polite" className="overflow-hidden rounded-3xl bg-hero p-5 text-primary-foreground shadow-lift md:p-6">
-          <div className="flex gap-4">
-            <div className="w-28 shrink-0"><CardTile card={best.card} /></div>
+      {!amountError && !dateError && best && (
+        <section
+          aria-live="polite"
+          aria-label="Recommended card"
+          className="rounded-3xl bg-hero p-5 text-primary-foreground shadow-lift"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-20 shrink-0">
+              <CardTile card={best.card} small />
+            </div>
             <div className="min-w-0">
-              <p className="text-sm opacity-80">{tied.length > 1 ? `Tie between ${tied.length} cards` : "Recommended"}</p>
-              <h2 className="font-display text-2xl leading-tight">Use {tied.map((t) => t.card.nickname || t.card.name).join(" or ")}</h2>
-              <p className="mt-1 text-lg">Estimated cash back: <b>{money(best.reward)}</b>{uncertain && <span className="ml-1 text-xs opacity-80">(category unconfirmed)</span>}</p>
+              <p className="text-xs opacity-80">
+                {tied.length > 1 ? "Same estimated reward" : "Recommended"}
+              </p>
+              <h2 className="font-display text-2xl leading-tight">
+                Use {tied.map((t) => t.card.nickname || t.card.name).join(" or ")}
+              </h2>
+              <p className="mt-1">
+                Estimated cash back <b>{money(best.reward)}</b>
+              </p>
             </div>
           </div>
           <p className="mt-3 text-sm opacity-90">{best.explanation}</p>
-          <Button variant="secondary" className="mt-4 w-full sm:w-auto" onClick={() => record(best.card.id)}>Record this purchase</Button>
+          {best.assumptions?.map((a) => (
+            <p key={a} className="mt-2 text-sm">
+              {a}{" "}
+              <Link to="/wallet" className="underline">
+                Update usage
+              </Link>
+            </p>
+          ))}
+          <Button
+            variant="secondary"
+            className="mt-4 w-full"
+            disabled={!!recordedId || date > today()}
+            onClick={() => record(best.card.id)}
+          >
+            {recordedId ? (
+              <>
+                <Check className="h-4 w-4" />
+                Recorded this purchase
+              </>
+            ) : date > today() ? (
+              "Future purchase — estimate only"
+            ) : (
+              "Record this purchase"
+            )}
+          </Button>
+          {recordedId && (
+            <button
+              className="mt-3 text-sm underline"
+              onClick={() => {
+                removePurchase(recordedId);
+                setRecordedId(null);
+                recording.current = false;
+              }}
+            >
+              Undo recording
+            </button>
+          )}
         </section>
       )}
-
-      {!amountError && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted-foreground">All cards, ranked by estimated cash back</h3>
-          {ranked.map((r, i) => (
-            <div key={r.card.id} className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex items-center gap-3">
-                <span className="w-5 text-sm text-muted-foreground">{i + 1}</span>
-                <CardTile card={r.card} small />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{r.card.nickname || r.card.name}</p>
-                  <p className="text-sm text-muted-foreground">{r.explanation}</p>
+      {!best && !dateError && (
+        <Empty
+          title="Finish setting up a card"
+          body="Confirm your card terms in My Wallet to include it in recommendations."
+          action={
+            <Button asChild>
+              <Link to="/wallet">Review my cards</Link>
+            </Button>
+          }
+        />
+      )}
+      <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+        {certainty.reason} Estimates exclude fees and interest.
+      </p>
+      <details className="rounded-2xl border border-border bg-card p-4">
+        <summary className="cursor-pointer text-sm font-medium">Date & purchase channel</summary>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Field label="Purchase date" error={dateError}>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => change(() => setDate(e.target.value))}
+            />
+          </Field>
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium">Where</legend>
+            <div className="flex gap-2">
+              {(["in-store", "online"] as Channel[]).map((c) => (
+                <Button
+                  key={c}
+                  variant={channel === c ? "default" : "outline"}
+                  aria-pressed={channel === c}
+                  onClick={() => change(() => setChannel(c))}
+                >
+                  {c === "online" ? "Online" : "In-store"}
+                </Button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </details>
+      {!amountError && ranked.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">All eligible cards</h2>
+          {ranked.map((r) => (
+            <article key={r.card.id} className="rounded-2xl border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-medium">{r.card.nickname || r.card.name}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">{r.explanation}</p>
                 </div>
-                <div className="text-right">
-                  <p className="font-display text-lg">{money(r.reward)}</p>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold">{money(r.reward)}</p>
                   <p className="text-xs text-muted-foreground">{r.effectiveRate}%</p>
                 </div>
               </div>
               {r.potential && (
-                <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs"><Lock className="h-3 w-3" /> Not counted: {r.potential.reason} to earn {money(r.potential.reward)}.</p>
+                <p className="mt-2 flex gap-1.5 rounded-lg bg-warning-soft p-2 text-xs">
+                  <Lock className="h-3 w-3 shrink-0" />
+                  Not counted: {r.potential.reason} for an estimated {money(r.potential.reward)}.
+                </p>
               )}
-              <button onClick={() => setOpen(open === r.card.id ? null : r.card.id)} className="mt-2 flex items-center gap-1 text-xs font-medium text-accent" aria-expanded={open === r.card.id}>
-                How we calculated this <ChevronDown className={`h-3 w-3 transition ${open === r.card.id ? "rotate-180" : ""}`} />
+              <button
+                aria-expanded={open === r.card.id}
+                onClick={() => setOpen(open === r.card.id ? null : r.card.id)}
+                className="mt-3 flex items-center gap-1 text-xs font-medium underline"
+              >
+                How we calculated this <ChevronDown className="h-3 w-3" />
               </button>
               {open === r.card.id && (
-                <div className="mt-2 space-y-1 rounded-lg bg-muted p-3 text-xs">
-                  {r.steps.map((s) => <p key={s}>{s}</p>)}
-                  {r.appliedRule && <p className="text-muted-foreground">Rule source: {r.appliedRule.source}{r.appliedRule.verified ? " · verified" : " · unverified"} · checked {r.appliedRule.lastChecked.slice(0, 10)}</p>}
-                  <p className="text-muted-foreground">Estimate only. Issuers decide final category coding.</p>
-                  {i > 0 && <button className="font-medium text-accent underline" onClick={() => record(r.card.id)}>Record with this card instead</button>}
+                <div className="mt-3 space-y-2 rounded-lg bg-muted p-3 text-xs">
+                  {r.steps.map((step, i) => (
+                    <p key={i}>{step}</p>
+                  ))}
+                  {r.appliedRule && (
+                    <p>
+                      Rule source: {r.appliedRule.source} ·{" "}
+                      {r.appliedRule.verified ? "source checked" : "confirm against your account"} ·
+                      checked {r.appliedRule.lastChecked.slice(0, 10)}
+                    </p>
+                  )}
+                  <p>
+                    Uses recorded spending through this purchase date. Issuers decide final
+                    eligibility.
+                  </p>
+                  {r.card.sourceUrls?.map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block underline"
+                    >
+                      Read issuer terms
+                    </a>
+                  ))}
+                  {r.card.id !== best?.card.id && (
+                    <button
+                      disabled={!!recordedId || date > today()}
+                      onClick={() => record(r.card.id)}
+                      className="underline disabled:opacity-50"
+                    >
+                      Record with this card instead
+                    </button>
+                  )}
                 </div>
               )}
-            </div>
+            </article>
           ))}
         </section>
       )}

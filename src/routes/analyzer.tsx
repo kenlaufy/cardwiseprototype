@@ -2,8 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { analyze, catalogUpside, RANGES, type Analysis, type RangeId } from "@/lib/analysis";
-import { CATALOG_CHECKED } from "@/lib/catalog";
+import { analyze, RANGES, type Analysis, type RangeId } from "@/lib/analysis";
 import { monthLabel, shortDate } from "@/lib/dates";
 import { today } from "@/lib/demo";
 import { money } from "@/lib/rewards";
@@ -43,7 +42,6 @@ function AnalyzerPage() {
   const [range, setRange] = useState<RangeId>("3m");
   const now = today();
   const a = useMemo(() => analyze(state, range, now), [state, range, now]);
-  const upside = useMemo(() => catalogUpside(state, a.purchases, a.days), [state, a]);
   const card = (id: string) => state.cards.find((c) => c.id === id);
   const cardName = (id: string) => card(id)?.nickname || card(id)?.name || "Card";
 
@@ -64,7 +62,7 @@ function AnalyzerPage() {
     );
 
   const top = a.byCategory[0];
-  const missedTotal = Math.max(0, Math.round((a.bestTotal - a.earned) * 100) / 100);
+  const largestOpportunity = a.missed[0] ? a.missed[0].best.reward - a.missed[0].earned : 0;
 
   return (
     <div className="space-y-8">
@@ -138,23 +136,19 @@ function AnalyzerPage() {
             </h2>
             <div className="grid gap-3 sm:grid-cols-3">
               <Stat
-                label="Cash back earned"
+                label="Estimated cash back"
                 value={money(a.earned)}
                 sub={`${rate(a.earned, a.spent)} of your spending`}
               />
               <Stat
-                label="Best possible with your cards"
-                value={money(Math.max(a.bestTotal, a.earned))}
-                sub={`${rate(Math.max(a.bestTotal, a.earned), a.spent)} using the best card every time`}
+                label="Purchases to review"
+                value={String(a.missed.length)}
+                sub="Independent comparisons using balances at the time"
               />
               <Stat
-                label="Left on the table"
-                value={money(missedTotal)}
-                sub={
-                  missedTotal > 0
-                    ? `on ${a.missed.length} ${a.missed.length === 1 ? "purchase" : "purchases"}`
-                    : "You used your best card every time"
-                }
+                label="Largest individual opportunity"
+                value={money(largestOpportunity)}
+                sub="Other opportunities may overlap; they cannot be added as guaranteed savings"
               />
             </div>
 
@@ -199,8 +193,8 @@ function AnalyzerPage() {
             </Panel>
 
             <Panel
-              title="Best card for each category"
-              sub="Which of your cards would have earned the most on what you spent, counting caps and offers."
+              title="Alternatives by category"
+              sub="Independent purchase comparisons using actual historical balances. A category may include several cards; these rates are estimates, not a single achievable plan."
             >
               <ul className="divide-y divide-border">
                 {a.byCategory.map((c) => {
@@ -238,8 +232,8 @@ function AnalyzerPage() {
 
             {a.missed.length > 0 && (
               <Panel
-                title="Where you left cash back behind"
-                sub="Purchases another of your cards would have paid more for."
+                title="Individual purchases to review"
+                sub="Each comparison changes only that purchase. Changing earlier spending can affect later caps and offers. These amounts are not additive."
               >
                 <ul className="divide-y divide-border">
                   {a.missed.slice(0, 5).map((m) => (
@@ -258,7 +252,7 @@ function AnalyzerPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Put on {cardName(m.purchase.cardId)} for {money(m.earned)}.{" "}
-                          {m.best.card.nickname || m.best.card.name} would have paid{" "}
+                          {m.best.card.nickname || m.best.card.name} was estimated at{" "}
                           {money(m.best.reward)}.
                         </p>
                       </div>
@@ -276,53 +270,10 @@ function AnalyzerPage() {
               </Panel>
             )}
 
-            <Panel
-              title="Cards that could earn you more"
-              sub="Catalog cards that would have added the most on this spending, scaled to a year, after annual fees."
-            >
-              {upside.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  None of the catalog cards would earn you more on this spending.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {upside.slice(0, 3).map((u) => (
-                    <li key={u.entry.id} className="flex items-center gap-3 py-2.5">
-                      <Swatch color={u.entry.color} large />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">
-                          {u.entry.name}{" "}
-                          <span className="font-normal text-muted-foreground">
-                            · {u.entry.issuer}
-                          </span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          +{money(u.extra)} on these purchases ·{" "}
-                          {u.entry.annualFee > 0
-                            ? `$${u.entry.annualFee} annual fee included`
-                            : "no annual fee"}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold tabular-nums">+{wholeDollars(u.net)}</p>
-                        <p className="text-xs text-muted-foreground">a year</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-3 text-xs text-muted-foreground">
-                Estimates from published terms checked {CATALOG_CHECKED}, assuming you activate its
-                bonuses and always use your best card. Not financial advice: check the issuer's
-                terms, fees and credit requirements before applying.
-              </p>
-              <Link
-                to="/wallet"
-                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-              >
-                Already have one? Add it in My Wallet <ArrowRight className="h-3 w-3" />
-              </Link>
-            </Panel>
+            <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+              Based on recorded purchases and their saved rules. This beta does not recommend new
+              cards or predict a globally optimal spending plan.
+            </p>
           </section>
         </>
       )}

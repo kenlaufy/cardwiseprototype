@@ -12,6 +12,7 @@ export interface CatalogRule {
   rate: number;
   cap?: string; // id of a cap in the same entry; rules pointing at one cap share it
   merchants?: string[];
+  excludedMerchants?: string[];
   channel?: Channel;
   startDate?: string;
   endDate?: string;
@@ -29,6 +30,8 @@ export interface CatalogCard {
   notes?: string[]; // terms the engine can't model, or choices the cardholder has to make
   caps?: { id: string; label: string; amount: number; period: Period }[];
   rules: CatalogRule[];
+  sourceUrls?: string[];
+  supported?: boolean;
   generic?: boolean; // a starting template, not a real product
 }
 
@@ -368,6 +371,26 @@ export const CATALOG: CatalogCard[] = [
   },
 ];
 
+// Only templates checked against primary issuer sources are offered in beta.
+// Complex legacy templates remain available to existing wallets for review.
+const CHECKED_SOURCES: Record<string, string[]> = {
+  "wf-active-cash": ["https://creditcards.wellsfargo.com/active-cash-credit-card/"],
+  "chase-freedom-unlimited": [
+    "https://www.chase.com/personal/credit-cards/freedom/unlimited",
+    "https://asset.chase.com/content/dam/card/rulesregulations/en/RPA0509_Web.pdf",
+  ],
+};
+for (const entry of CATALOG) {
+  entry.supported = !!CHECKED_SOURCES[entry.id];
+  entry.sourceUrls = CHECKED_SOURCES[entry.id] ?? [];
+  if (entry.supported)
+    entry.notes = [
+      ...(entry.notes ?? []),
+      "Eligible retail purchases only. Cash advances, fees, interest, welcome bonuses, refunds and foreign transaction costs are not modeled. Check your own account terms.",
+    ];
+}
+export const BETA_CATALOG = CATALOG.filter((c) => c.supported || c.generic);
+
 export interface CatalogDraft {
   card: Card;
   rules: BonusRule[];
@@ -387,6 +410,7 @@ export function catalogDraft(t: CatalogCard, makeId: () => string): CatalogDraft
     label: c.label,
     amount: c.amount,
     period: c.period,
+    opening: { date: today(), used: null },
   }));
   const rules: BonusRule[] = t.rules.map((r) => ({
     id: makeId(),
@@ -395,6 +419,7 @@ export function catalogDraft(t: CatalogCard, makeId: () => string): CatalogDraft
     rate: r.rate,
     channel: r.channel,
     merchants: r.merchants && [...r.merchants],
+    excludedMerchants: r.excludedMerchants && [...r.excludedMerchants],
     capGroupId: r.cap && capIds.get(r.cap),
     startDate: r.startDate,
     endDate: r.endDate,
@@ -405,7 +430,21 @@ export function catalogDraft(t: CatalogCard, makeId: () => string): CatalogDraft
     lastChecked,
   }));
   return {
-    card: { id, name: t.name, issuer: t.issuer, color: t.color, baseRate: t.baseRate, annualFee: t.annualFee || undefined, source },
+    card: {
+      id,
+      name: t.name,
+      issuer: t.issuer,
+      color: t.color,
+      baseRate: t.baseRate,
+      annualFee: t.annualFee || undefined,
+      source,
+      catalogId: t.generic ? undefined : t.id,
+      catalogVersion: CATALOG_CHECKED,
+      sourceUrls: t.sourceUrls ?? [],
+      notes: t.notes ?? [],
+      checkedOn: t.supported ? CATALOG_CHECKED : undefined,
+      setupConfirmed: t.generic ? true : false,
+    },
     rules,
     caps,
     notes: t.notes ?? [],

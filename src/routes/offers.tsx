@@ -20,6 +20,7 @@ import { useStore, uid, type Prefs } from "@/lib/store";
 import { buildReminders, type Reminder } from "@/lib/reminders";
 import { money, type Card, type Offer } from "@/lib/rewards";
 import { addDays, today } from "@/lib/demo";
+import { isDate } from "@/lib/persistence";
 import { daysBetween, relativeDays, shortDate } from "@/lib/dates";
 import { CardTile } from "@/components/CardTile";
 import { CategoryChips, Empty, Field, PageTitle, selectCls } from "@/components/Field";
@@ -43,7 +44,10 @@ export const Route = createFileRoute("/offers")({
         content: "Track card offers, activation deadlines, and cap reminders.",
       },
       { property: "og:title", content: "Offers & Reminders — CardWise" },
-      { property: "og:description", content: "Never miss an activation deadline or bonus cap." },
+      {
+        property: "og:description",
+        content: "Review activation deadlines and bonus caps when you open CardWise.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -70,13 +74,16 @@ function OffersPage() {
   const [edit, setEdit] = useState<Offer | null>(null);
   const now = today();
   const reminders = buildReminders(state, state.prefs, state.dismissed, now);
-  const active = state.offers
+  const visibleOffers = state.offers.filter((o) =>
+    state.cards.some((c) => c.id === o.cardId && !c.archived),
+  );
+  const active = visibleOffers
     .filter((o) => o.startDate <= now && o.endDate >= now)
     .sort((a, b) => a.endDate.localeCompare(b.endDate));
-  const upcoming = state.offers
+  const upcoming = visibleOffers
     .filter((o) => o.startDate > now)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const expired = state.offers
+  const expired = visibleOffers
     .filter((o) => o.endDate < now)
     .sort((a, b) => b.endDate.localeCompare(a.endDate));
   const cardOf = (id: string) => state.cards.find((c) => c.id === id);
@@ -84,7 +91,7 @@ function OffersPage() {
 
   const newOffer = (): Offer => ({
     id: uid(),
-    cardId: state.cards[0]?.id ?? "",
+    cardId: state.cards.find((c) => !c.archived)?.id ?? "",
     title: "",
     categories: [],
     rate: 5,
@@ -103,7 +110,7 @@ function OffersPage() {
   });
 
   const setActivated = (o: Offer, activated: boolean) => {
-    saveOffer({ ...o, activated });
+    if (!saveOffer({ ...o, activated })) return;
     toast.success(
       activated
         ? `"${o.title}" now counts in recommendations`
@@ -112,14 +119,14 @@ function OffersPage() {
     );
   };
   const remove = (o: Offer) => {
-    removeOffer(o.id);
+    if (!removeOffer(o.id)) return;
     toast.success(
       `Deleted "${o.title}"`,
       undoable(() => saveOffer(o)),
     );
   };
   const activateRule = (id: string) => {
-    setRuleActivated(id, true);
+    if (!setRuleActivated(id, true)) return;
     toast.success(
       "Bonus marked as activated",
       undoable(() => setRuleActivated(id, false)),
@@ -142,18 +149,25 @@ function OffersPage() {
     <div className="space-y-8">
       <PageTitle
         title="Offers"
-        sub="Limited-time deals from your card issuers. An offer only counts in recommendations once it's active on your card."
+        sub="Manually entered percentage offers. Confirm activation and any reward already used."
         action={
-          <Button disabled={!state.cards.length} onClick={() => setEdit(newOffer())}>
+          <Button
+            disabled={!state.cards.some((c) => !c.archived)}
+            onClick={() => setEdit(newOffer())}
+          >
             <Plus className="h-4 w-4" /> Add offer
           </Button>
         }
       />
 
+      <p className="text-xs text-muted-foreground">
+        Reminders appear here when you open CardWise. No background notifications or issuer
+        activation are performed.
+      </p>
       <section className="rounded-3xl bg-card p-5 shadow-soft">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 font-display text-xl">
-            <BellRing className="h-4 w-4" /> Reminders
+            <BellRing className="h-4 w-4" /> In-app reminders
           </h2>
           {reminders.length > 0 && (
             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
@@ -257,7 +271,7 @@ function OffersPage() {
           onClose={() => setEdit(null)}
           onSave={(o) => {
             const added = isNew(o);
-            saveOffer(o);
+            if (!saveOffer(o)) return;
             setEdit(null);
             toast.success(added ? `Added "${o.title}"` : "Offer updated");
           }}
@@ -391,7 +405,14 @@ function OfferCard({
         <div>
           <dt className="text-xs text-muted-foreground">You get</dt>
           <dd>
-            {o.rate}% back{o.maxReward != null && `, up to ${money(o.maxReward)}`}
+            {o.rate}% extra{o.maxReward != null && `, up to ${money(o.maxReward)}`}
+            <span className="block text-xs text-muted-foreground">
+              {o.limitScope === "purchase"
+                ? "Limit per purchase"
+                : o.limitScope === "once"
+                  ? "One qualifying purchase"
+                  : "Limit across the entire offer"}
+            </span>
           </dd>
         </div>
         <div>
@@ -418,8 +439,8 @@ function OfferCard({
       </dl>
       <p className="mt-2 text-xs text-muted-foreground">
         {o.stackable
-          ? "Adds to everything the card already earns."
-          : "Replaces the card's bonus rate: you get its base rate plus this offer, if that's more."}
+          ? "Adds to card rewards and other compatible stackable offers."
+          : "Exclusive: base rate plus this offer, when better than bonuses and other offers."}
       </p>
 
       {!expired &&
@@ -506,10 +527,18 @@ function OfferForm({
     if (!(d.rate > 0 && d.rate <= 100)) return setErr("Cash back must be between 0% and 100%");
     if (d.maxReward != null && !(d.maxReward > 0))
       return setErr("Max cash back must be more than $0, or left empty for no limit");
-    if (!d.startDate || !d.endDate) return setErr("Pick when the offer starts and ends");
+    if (!isDate(d.startDate) || !isDate(d.endDate))
+      return setErr("Pick when the offer starts and ends");
     if (d.endDate < d.startDate) return setErr("The offer ends before it starts");
     if (d.requiresActivation && d.activationUrl && !/^https:\/\//.test(d.activationUrl))
       return setErr("The activation link must start with https://");
+    if (
+      d.opening &&
+      (!Number.isFinite(d.opening.used) ||
+        d.opening.used < 0 ||
+        (d.maxReward != null && d.opening.used > d.maxReward))
+    )
+      return setErr("Used reward must be between $0 and the offer limit");
     onSave({
       ...d,
       title: d.title.trim(),
@@ -525,7 +554,8 @@ function OfferForm({
         <DialogHeader>
           <DialogTitle>{isNew ? "Add an offer" : "Edit offer"}</DialogTitle>
           <DialogDescription>
-            Copy the details from the offer in your card issuer's app.
+            Copy a percentage offer from your issuer. Fixed-dollar, minimum-spend and billing-cycle
+            offers are not supported in this beta.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -545,11 +575,13 @@ function OfferForm({
               value={d.cardId}
               onChange={(e) => set({ cardId: e.target.value })}
             >
-              {state.cards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nickname || c.name}
-                </option>
-              ))}
+              {state.cards
+                .filter((c) => !c.archived || c.id === d.cardId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nickname || c.name}
+                  </option>
+                ))}
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -595,6 +627,37 @@ function OfferForm({
               />
             </Field>
           </div>
+          <Field label="Reward limit applies">
+            <select
+              className={selectCls}
+              value={d.limitScope ?? "offer"}
+              onChange={(e) => set({ limitScope: e.target.value as Offer["limitScope"] })}
+            >
+              <option value="offer">Across the entire offer</option>
+              <option value="purchase">Separately for each purchase</option>
+              <option value="once">One qualifying purchase only</option>
+            </select>
+          </Field>
+          {d.limitScope !== "purchase" && (
+            <Field label="Offer reward already used ($)">
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={d.opening?.used ?? 0}
+                onChange={(e) =>
+                  set({
+                    opening: {
+                      date: today(),
+                      used: Number(e.target.value),
+                      throughOrder:
+                        Math.max(-1, ...state.purchases.map((p, i) => p.order ?? i)) + 1,
+                    },
+                  })
+                }
+              />
+            </Field>
+          )}
           <Field label="Applies to">
             <p className="text-xs text-muted-foreground">
               Pick the categories it covers, or leave them all off for any purchase.
@@ -640,7 +703,7 @@ function OfferForm({
             <ToggleRow
               id={`${id}-stack`}
               label="Stacks with card bonuses"
-              hint="On: adds to everything the card earns. Off: replaces the card's bonus rate, and CardWise counts whichever pays more."
+              hint="On: combines with card bonuses and other compatible stackable offers. Off: is exclusive of bonuses and other offers. Confirm your issuer permits stacking."
               checked={d.stackable}
               onChange={(v) => set({ stackable: v })}
             />

@@ -27,6 +27,15 @@ test("guided setup, single recording, refresh and archive preserve history", asy
   await expect(page.getByText("Fictional QA store", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "My Wallet", exact: true }).click();
   await page.getByRole("button", { name: "Archive Active Cash", exact: true }).click();
+  if ((page.viewportSize()?.width ?? 1000) < 768) {
+    const toast = page
+      .getByRole("listitem")
+      .filter({ hasText: "Card archived — purchase history kept" });
+    await expect(toast).toBeVisible();
+    const toastBox = await toast.boundingBox(),
+      navBox = await page.getByRole("navigation", { name: "Main", exact: true }).boundingBox();
+    expect(toastBox!.y + toastBox!.height).toBeLessThanOrEqual(navBox!.y);
+  }
   await page.getByRole("link", { name: "Activity", exact: true }).click();
   await expect(page.getByText("Fictional QA store", { exact: true })).toBeVisible();
 });
@@ -45,7 +54,7 @@ test("backup export and restore recover the same recorded wallet", async ({ page
   await page
     .getByRole("button", { name: "Delete wallet and recovery copies", exact: true })
     .click();
-  await page.getByRole("button", { name: "Start my own wallet", exact: true }).click();
+  await page.getByRole("button", { name: "Start my wallet", exact: true }).click();
   await dataSettings(page);
   await page
     .getByLabel("CardWise backup file", { exact: true })

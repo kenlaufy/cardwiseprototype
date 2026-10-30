@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { SUPPORT_URL } from "@/lib/support";
 import { PageTitle } from "@/components/Field";
 export const Route = createFileRoute("/about")({
   head: () => ({ meta: [{ title: "About, privacy & support — CardWise" }] }),
@@ -72,14 +73,16 @@ function About() {
           reproduce it. Do not include your wallet backup, card details or personal purchase history
           in a public report.
         </p>
-        <a
-          className="underline"
-          href="https://github.com/kenlaufy/cardwiseprototype/issues/new"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Report an issue on GitHub
-        </a>
+        {SUPPORT_URL ? (
+          <a className="underline" href={SUPPORT_URL} target="_blank" rel="noreferrer">
+            Contact CardWise support
+          </a>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            For this private beta, contact the person who invited you. A public support destination
+            will be listed here when public enrollment opens.
+          </p>
+        )}
       </section>
     </div>
   );

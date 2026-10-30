@@ -45,4 +45,4 @@ The full wallet backup is unencrypted JSON. Production support must never ask us
 
 Read [the release runbook](docs/RELEASE.md) before production publication and [the catalog maintenance guide](docs/CATALOG.md) before changing supported templates. The repository remains connected to Lovable: preserve published Git history and deploy only a reviewed, passing commit.
 
-The public About and Data & privacy pages describe storage, limitations and support. Support uses this repository's issue tracker with fictional reproduction data. Hosting configuration, a custom domain, support ownership and an actual user pilot remain operational responsibilities of the repository maintainer.
+The public About and Data & privacy pages describe storage, limitations and support. Support defaults to this public repository’s issue tracker with fictional reproduction data. Optionally set `VITE_SUPPORT_URL` to a public HTTPS help page or support mailto address. Hosting configuration, a custom domain, support ownership and an actual user pilot remain operational responsibilities of the repository maintainer.

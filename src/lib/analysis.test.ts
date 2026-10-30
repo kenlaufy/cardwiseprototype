@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyze, catalogUpside, earnedByPurchase, feeChecks, feeVerdict } from "./analysis";
+import { analyze, earnedByPurchase, feeChecks, feeVerdict } from "./analysis";
 import { monthLabel, monthStart } from "./dates";
 import { buildDemo } from "./demo";
 
@@ -59,7 +59,7 @@ describe("reward analysis", () => {
     const h3 = a.missed.find((m) => m.purchase.id === "h3")!;
     expect(h3).toMatchObject({ earned: 0.36, best: expect.objectContaining({ reward: 0.72 }) });
     expect(h3.best.card.id).toBe("flat");
-    expect(a.bestTotal).toBeGreaterThan(a.earned);
+    expect(a.independentAlternativeTotal).toBeGreaterThan(a.earned);
   });
 
   it("compares the card used most per category with the one that would have earned most", () => {
@@ -73,20 +73,6 @@ describe("reward analysis", () => {
       earned: 0.23,
       bestEarned: 0.45,
     });
-  });
-
-  it("ranks catalog cards by what they'd add per year after fees", () => {
-    const s = demo();
-    const a = analyze(s, "3m", NOW);
-    const upside = catalogUpside(s, a.purchases, a.days);
-    expect(upside.length).toBeGreaterThan(0);
-    for (const u of upside) {
-      expect(u.entry.generic).toBeFalsy();
-      expect(u.net).toBe(Math.round((u.perYear - u.entry.annualFee) * 100) / 100);
-      expect(u.net).toBeGreaterThan(0);
-    }
-    const nets = upside.map((u) => u.net);
-    expect(nets).toEqual([...nets].sort((x, y) => y - x));
   });
 });
 

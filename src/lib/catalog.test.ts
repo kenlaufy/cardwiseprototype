@@ -13,14 +13,14 @@ function walletWith(catalogId: string) {
   const state: WalletState = {
     cards: [d.card],
     rules: d.rules,
-    capGroups: d.caps,
+    capGroups: d.caps.map((g) => ({ ...g, opening: undefined })),
     offers: [],
     purchases: [],
   };
   const earn = (p: Pick<PurchaseInput, "amount" | "category"> & Partial<PurchaseInput>) =>
     calculateCard(state, d.card, { date: NOW, channel: "in-store", ...p });
   const spend = (p: Pick<PurchaseInput, "amount" | "category" | "date"> & Partial<PurchaseInput>) =>
-    state.purchases.push({ id: makeId(), cardId: d.card.id, channel: "in-store", ...p });
+    state.purchases.push({ channel: "in-store", ...p, id: makeId(), cardId: d.card.id });
   const activateAll = () => {
     state.rules = state.rules.map((r) => (r.requiresActivation ? { ...r, activated: true } : r));
   };

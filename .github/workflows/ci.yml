@@ -33,8 +33,28 @@ jobs:
       - name: Lint
         run: 'bun x eslint . --rule "prettier/prettier: off"'
 
+      - name: Dependency advisories
+        run: bun audit
+
       - name: Unit tests
         run: bun run test
 
       - name: Build
         run: bun run build
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun x playwright install --with-deps chromium webkit
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-traces
+          path: test-results/
+          retention-days: 7

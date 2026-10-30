@@ -1,8 +1,6 @@
-import { CATALOG, catalogDraft, type CatalogCard } from "./catalog";
 import { daysBetween, monthStart } from "./dates";
 import {
-  calculateCard,
-  rankCards,
+  replayPurchases,
   type Card,
   type CardResult,
   type Category,
@@ -25,36 +23,16 @@ const sum = (xs: number[]) => round2(xs.reduce((s, x) => s + x, 0));
 
 /** Cash back each purchase earned on the card it went on, counting caps used by earlier purchases only. */
 export function earnedByPurchase(state: WalletState): Map<string, number> {
-  const order = new Map(state.purchases.map((p, i) => [p.id, i]));
-  const out = new Map<string, number>();
-  for (const p of state.purchases) {
-    const card = state.cards.find((c) => c.id === p.cardId);
-    if (!card) {
-      out.set(p.id, 0);
-      continue;
-    }
-    const prior = state.purchases.filter(
-      (x) =>
-        x.id !== p.id &&
-        (x.date < p.date || (x.date === p.date && order.get(x.id)! < order.get(p.id)!)),
-    );
-    out.set(p.id, calculateCard({ ...state, purchases: prior }, card, p).reward);
-  }
-  return out;
+  return new Map([...replayPurchases(state).earned].map(([id, result]) => [id, result.reward]));
 }
 
-/** Replays purchases in date order, putting each on whichever card earns most, so caps fill up as they would have. */
-export function bestCase(state: WalletState, purchases: Purchase[]): Map<string, CardResult> {
-  const placed: Purchase[] = [];
-  const sim: WalletState = { ...state, purchases: placed };
-  const out = new Map<string, CardResult>();
-  for (const p of [...purchases].sort((a, b) => a.date.localeCompare(b.date))) {
-    const best = rankCards(sim, p)[0];
-    if (!best) continue;
-    out.set(p.id, best);
-    placed.push({ ...p, cardId: best.card.id });
-  }
-  return out;
+/** Independent alternatives using actual historical balances; never a global optimum. */
+export function purchaseAlternatives(
+  state: WalletState,
+  purchases: Purchase[],
+): Map<string, CardResult> {
+  const ids = new Set(purchases.map((p) => p.id));
+  return new Map([...replayPurchases(state).alternatives].filter(([id]) => ids.has(id)));
 }
 
 export interface Missed {
@@ -69,12 +47,12 @@ export interface Analysis {
   purchases: Purchase[];
   spent: number;
   earned: number;
-  bestTotal: number;
+  independentAlternativeTotal: number;
   byCategory: {
     category: Category;
     spent: number;
     earned: number;
-    bestEarned: number; // using the best card every time
+    bestEarned: number; // independent alternatives; not an achievable combined total
     count: number;
     usedCardId: string; // the card most of this category's spending went on
     bestCardId: string; // the card that would have earned most on most of it
@@ -90,9 +68,10 @@ export function analyze(state: WalletState, range: RangeId, now: string): Analys
   const earliest = past.reduce((min, p) => (p.date < min ? p.date : min), now);
   const start = months ? monthStart(now, months - 1) : monthStart(earliest);
   const purchases = past.filter((p) => p.date >= start);
-  const earnedMap = earnedByPurchase(state);
-  const earnedOf = (p: Purchase) => earnedMap.get(p.id) ?? 0;
-  const best = bestCase(state, purchases);
+  const replay = replayPurchases(state);
+  const earnedOf = (p: Purchase) => replay.earned.get(p.id)?.reward ?? 0;
+  const ids = new Set(purchases.map((p) => p.id));
+  const best = new Map([...replay.alternatives].filter(([id]) => ids.has(id)));
   const bestOf = (p: Purchase) => best.get(p.id);
   // The card carrying the most spending among these purchases.
   const topCard = (ps: Purchase[], cardOf: (p: Purchase) => string | undefined) => {
@@ -156,46 +135,12 @@ export function analyze(state: WalletState, range: RangeId, now: string): Analys
     purchases,
     spent: sum(purchases.map((p) => p.amount)),
     earned: sum(purchases.map(earnedOf)),
-    bestTotal: sum([...best.values()].map((r) => r.reward)),
+    independentAlternativeTotal: sum([...best.values()].map((r) => r.reward)),
     byCategory,
     byCard,
     byMonth,
     missed,
   };
-}
-
-export interface Upside {
-  entry: CatalogCard;
-  extra: number; // more cash back on these purchases, using the best card each time
-  perYear: number;
-  net: number; // per year, after the annual fee
-}
-
-/**
- * How much more each catalog card would have earned on these purchases if it were in the wallet,
- * assuming you'd activate its bonuses and always use your best card. Scaled to a year.
- */
-export function catalogUpside(state: WalletState, purchases: Purchase[], days: number): Upside[] {
-  if (!purchases.length) return [];
-  const base = sum([...bestCase(state, purchases).values()].map((r) => r.reward));
-  const owned = new Set(state.cards.map((c) => `${c.issuer}|${c.name}`.toLowerCase()));
-  let n = 0;
-  const makeId = () => `sim-${++n}`;
-  return CATALOG.filter((t) => !t.generic && !owned.has(`${t.issuer}|${t.name}`.toLowerCase()))
-    .map((entry) => {
-      const d = catalogDraft(entry, makeId);
-      const sim: WalletState = {
-        ...state,
-        cards: [...state.cards, d.card],
-        rules: [...state.rules, ...d.rules.map((r) => ({ ...r, activated: true }))],
-        capGroups: [...state.capGroups, ...d.caps],
-      };
-      const extra = round2(sum([...bestCase(sim, purchases).values()].map((r) => r.reward)) - base);
-      const perYear = round2((extra * 365) / Math.max(days, 30));
-      return { entry, extra, perYear, net: round2(perYear - entry.annualFee) };
-    })
-    .filter((u) => u.extra > 0 && u.net > 0)
-    .sort((a, b) => b.net - a.net);
 }
 
 export type FeeVerdict = "keep" | "borderline" | "costly" | "early";
@@ -236,28 +181,17 @@ export function feeChecks(state: WalletState, now: string): FeeCheck[] {
   const earnedMap = earnedByPurchase(state);
 
   return state.cards
-    .filter((card) => (card.annualFee ?? 0) > 0)
+    .filter((card) => !card.archived && (card.annualFee ?? 0) > 0)
     .map((card) => {
       const fee = card.annualFee ?? 0;
       const mine = thisYear.filter((p) => p.cardId === card.id);
       const earned = sum(mine.map((p) => earnedMap.get(p.id) ?? 0));
       const others = state.cards.filter((c) => c.id !== card.id);
-      let baseline: number;
-      if (others.length) {
-        // Replay this card's purchases on your other cards, on top of what they already carry.
-        const placed = state.purchases.filter((p) => p.cardId !== card.id);
-        const sim: WalletState = { ...state, cards: others, purchases: placed };
-        let total = 0;
-        for (const p of [...mine].sort((a, b) => a.date.localeCompare(b.date))) {
-          const best = rankCards(sim, p)[0];
-          if (!best) continue;
-          total += best.reward;
-          placed.push({ ...p, cardId: best.card.id });
-        }
-        baseline = round2(total);
-      } else {
-        baseline = sum(mine.map((p) => round2(p.amount * 0.02)));
-      }
+      const alternatives = replayPurchases(state, card.id).alternatives;
+      const baseline = others.length
+        ? sum(mine.map((p) => alternatives.get(p.id)?.reward ?? 0))
+        : sum(mine.map((p) => round2(p.amount * 0.02)));
+
       const perYear = {
         earned: round2(earned * scale),
         baseline: round2(baseline * scale),
